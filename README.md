@@ -1,5 +1,5 @@
 # gochecksec
-A Go progam that checks the security flags for Linux binaries
+A Go program that checks the security flags for Linux binaries
 
 # Summary
 This was inspired by pwntools checksec and not wanting to have to install a venv in python to be able 
