@@ -1,15 +1,14 @@
 BINARY=gochecksec
-GO=/usr/local/go/bin/go
 
 all: build
 
 build: build-x86_64 build-arm64
 
 build-x86_64:
-	GOOS=linux GOARCH=amd64 $(GO) build -ldflags "-s -w" -o $(BINARY)_x86_64
+	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o $(BINARY)_x86_64
 
 build-arm64:
-	GOOS=linux GOARCH=arm64 $(GO) build -ldflags "-s -w" -o $(BINARY)_arm64
+	GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o $(BINARY)_arm64
 
 clean:
 	@rm -f $(BINARY)_x86_64 $(BINARY)_arm64
@@ -17,12 +16,12 @@ clean:
 debug-amd64:
 	@export GOFLAGS=-gcflags="all=-N -l"
 	@echo "Building Debug AMD64 Binary"
-	GOOS=linux GOARCH=amd64 $(GO) build -ldflags "-X main.BuildTime=`date -u '+%Y-%m-%d_%I:%M:%S%p'`" -o $(BINARY)-debug-amd64 main.go
+	GOOS=linux GOARCH=amd64 go build -ldflags "-X main.BuildTime=`date -u '+%Y-%m-%d_%I:%M:%S%p'`" -o $(BINARY)-debug-amd64 main.go
 
 debug-arm64:
 	@export GOFLAGS=-gcflags="all=-N -l"
 	@echo "Building Debug ARM64 Binary"
-	GOOS=linux GOARCH=arm64 $(GO) build -ldflags "-X main.BuildTime=`date -u '+%Y-%m-%d_%I:%M:%S%p'`" -o $(BINARY)-debug-arm64 main.go
+	GOOS=linux GOARCH=arm64 go build -ldflags "-X main.BuildTime=`date -u '+%Y-%m-%d_%I:%M:%S%p'`" -o $(BINARY)-debug-arm64 main.go
 
 # Clean Debug Binary
 clean-debug:
