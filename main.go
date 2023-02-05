@@ -9,7 +9,7 @@ import (
 	"github.com/fatih/color"
 )
 
-var version = "1.0.0"
+var version = "1.0.1"
 
 func main() {
 	red, green := color.New(color.FgRed).PrintlnFunc(), color.New(color.FgGreen).PrintlnFunc()
