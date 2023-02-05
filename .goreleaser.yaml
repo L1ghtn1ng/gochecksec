@@ -1,0 +1,17 @@
+project_name: gochecksec
+builds:
+  - env: [CGO_ENABLED=0]
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+nfpms:
+- maintainer: Jay Townsend <jay@cybermon.uk>
+  description: A Go program that checks the security flags for Linux binaries.
+  homepage: https://github.com/L1ghtn1ng/gochecksec
+  license: GPLv3
+  formats:
+  - deb
+  - rpm
