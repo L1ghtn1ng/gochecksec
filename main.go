@@ -9,7 +9,7 @@ import (
 	"github.com/fatih/color"
 )
 
-var version = "1.0.1"
+var version = "1.1.0"
 
 func main() {
 	red, green := color.New(color.FgRed).PrintlnFunc(), color.New(color.FgGreen).PrintlnFunc()
@@ -45,7 +45,7 @@ func main() {
 		green("Arch: %d\n", arch)
 	}
 
-	// Check for RELRO
+	// Check for RELRO (Relocation Read-Only)
 	if binary.Section(".data.rel.ro") != nil {
 		// Check for Full RELRO
 		if binary.Section(".data.rel.ro").Addr == binary.Section(".data").Addr {
