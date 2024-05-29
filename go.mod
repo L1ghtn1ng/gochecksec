@@ -1,6 +1,6 @@
 module gochecksec
 
-go 1.21
+go 1.22
 
 require github.com/fatih/color v1.17.0
 
