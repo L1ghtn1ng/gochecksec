@@ -25,3 +25,9 @@ jobs:
 
     - name: Build
       run: make -f MakeFile build
+
+    - name: Install GCC
+      run: sudo apt-get update && sudo apt-get install -y gcc
+
+    - name: Test
+      run: go test -v ./...
