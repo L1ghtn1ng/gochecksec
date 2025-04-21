@@ -6,7 +6,7 @@ This was inspired by pwntools checksec and not wanting to have to install a venv
 to use it when you want to use do a quick check of a binary security flags
 
 # Building
-This requires go 1.22 to build then you can use ```make -f MakeFile build``` to build the binaries.
+This requires go 1.24 to build then you can use ```make -f MakeFile build``` to build the binaries.
 
 # Installing
 You can get the ```deb, rpm or archlinux pkg``` package from [here](https://github.com/L1ghtn1ng/gochecksec/releases/latest) as well as a precompiled binary for you respective CPU architecture from the ```.tar.gz``` and then move the gochecksec binary to ```/usr/local/bin/``` and you now have it installed
