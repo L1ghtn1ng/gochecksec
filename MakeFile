@@ -1,6 +1,6 @@
 BINARY=gochecksec
 
-all: build
+all: test build
 
 build: build-x86_64 build-arm64
 
@@ -9,6 +9,9 @@ build-x86_64:
 
 build-arm64:
 	GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o $(BINARY)_arm64
+
+test:
+	go test -v ./...
 
 clean:
 	@rm -f $(BINARY)_x86_64 $(BINARY)_arm64
