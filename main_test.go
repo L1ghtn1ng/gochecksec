@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"debug/elf"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -393,13 +395,35 @@ int main() {
 
 	// Compile each binary
 	for name, cmd := range compileCommands {
-		if err := exec.Command(cmd[0], cmd[1:]...).Run(); err != nil {
-			t.Logf("Warning: Failed to compile %s: %v", name, err)
+		if err := compileBinary(name, cmd); err != nil {
+			t.Logf("Warning: %v", err)
 			// Continue with other binaries
 		}
 	}
 
 	return binaries, nil
+}
+
+func compileBinary(name string, cmd []string) error {
+	compileCmd := exec.Command(cmd[0], cmd[1:]...)
+	stderr := new(bytes.Buffer{})
+	compileCmd.Stderr = stderr
+
+	if err := compileCmd.Run(); err != nil {
+		// Go 1.26: errors.AsType provides a concise typed unwrap path.
+		exitErr, ok := errors.AsType[*exec.ExitError](err)
+		if !ok {
+			return fmt.Errorf("failed to compile %s: %w", name, err)
+		}
+
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = strings.TrimSpace(exitErr.Error())
+		}
+		return fmt.Errorf("failed to compile %s: %s", name, msg)
+	}
+
+	return nil
 }
 
 func cleanupTestBinaries(binaries map[string]string) {
@@ -473,10 +497,10 @@ func TestIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Run gochecksec on the binary
 			cmd := exec.Command(gochecksecBin, tt.binary)
-			var stdout bytes.Buffer
-			cmd.Stdout = &stdout
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
+			stdout := new(bytes.Buffer{})
+			cmd.Stdout = stdout
+			stderr := new(bytes.Buffer{})
+			cmd.Stderr = stderr
 
 			if err := cmd.Run(); err != nil {
 				t.Fatalf("Failed to run gochecksec: %v\nStderr: %s", err, stderr.String())

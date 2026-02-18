@@ -2,6 +2,7 @@ package main
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -256,7 +257,12 @@ func main() {
 
 	binary, err := elf.Open(filename)
 	if err != nil {
-		if _, err := fmt.Fprintln(os.Stderr, err); err != nil {
+		if pathErr, ok := errors.AsType[*os.PathError](err); ok {
+			_, err = fmt.Fprintf(os.Stderr, "failed to open %s: %v\n", pathErr.Path, pathErr.Err)
+		} else {
+			_, err = fmt.Fprintln(os.Stderr, err)
+		}
+		if err != nil {
 			return
 		}
 		os.Exit(1)
