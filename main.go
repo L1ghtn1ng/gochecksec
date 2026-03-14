@@ -11,7 +11,7 @@ import (
 	"github.com/fatih/color"
 )
 
-var version = "1.5.1"
+var version = "2.0.0"
 
 // RelroStatus represents the status of RELRO protection
 type RelroStatus int
