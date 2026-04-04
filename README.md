@@ -1,4 +1,5 @@
 # gochecksec
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/L1ghtn1ng/gochecksec)
 A Go program that checks the security flags for Linux binaries
 
 # Summary
