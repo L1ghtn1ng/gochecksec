@@ -1,17 +1,30 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-
 version: 2
+multi-ecosystem-groups:
+  all-dependencies:
+    schedule:
+      interval: daily
+      timezone: Europe/London
+    open-pull-requests-limit: 10
+    target-branch: main
 updates:
-  - package-ecosystem: "gomod"
-    directory: "/" # Location of package manifests
-    schedule:
-      interval: "weekly"
-
-  # Maintain dependencies for GitHub Actions
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+- package-ecosystem: github-actions
+  directory: "/"
+  schedule:
+    interval: daily
+    timezone: Europe/London
+  cooldown:
+    default-days: 5
+  patterns: ["*"]
+  multi-ecosystem-group: all-dependencies
+- package-ecosystem: gomod
+  directory: "/"
+  schedule:
+    interval: daily
+    timezone: Europe/London
+  cooldown:
+    default-days: 5
+  patterns: ["*"]
+  multi-ecosystem-group: all-dependencies
+  allow:
+  - dependency-type: direct
+  - dependency-type: indirect
