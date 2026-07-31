@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"debug/elf"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -441,7 +443,59 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+func TestRunUpdate(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		called := false
+		updater := func(output, diagnostics io.Writer) error {
+			called = true
+			_, err := fmt.Fprintln(output, "updated")
+			return err
+		}
+		if status := runWithUpdater([]string{"-u"}, &stdout, &stderr, updater); status != 0 {
+			t.Fatalf("runWithUpdater() status = %d, want 0; stderr: %s", status, stderr.String())
+		}
+		if !called {
+			t.Fatal("updater was not called")
+		}
+		if stdout.String() != "updated\n" {
+			t.Fatalf("stdout = %q, want updater output", stdout.String())
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("stderr = %q, want empty output", stderr.String())
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		updater := func(io.Writer, io.Writer) error {
+			return errors.New("network failure")
+		}
+		if status := runWithUpdater([]string{"-u"}, &stdout, &stderr, updater); status != 1 {
+			t.Fatalf("runWithUpdater() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "update failed: network failure") {
+			t.Fatalf("stderr = %q, want update error", stderr.String())
+		}
+	})
+}
+
 func TestRunErrors(t *testing.T) {
+	t.Run("help", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-h"}, &stdout, &stderr); status != 0 {
+			t.Fatalf("run() status = %d, want 0", status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("stdout = %q, want empty output", stdout.String())
+		}
+		for _, expected := range []string{"Usage:", "-b", "-u", "-v"} {
+			if !strings.Contains(stderr.String(), expected) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), expected)
+			}
+		}
+	})
+
 	t.Run("usage", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
 		if status := run(nil, &stdout, &stderr); status != 1 {
@@ -455,9 +509,55 @@ func TestRunErrors(t *testing.T) {
 		}
 	})
 
+	t.Run("unknown flag", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-unknown"}, &stdout, &stderr); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Fatalf("stderr = %q, want flag parse error", stderr.String())
+		}
+	})
+
+	t.Run("conflicting flags", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		updater := func(io.Writer, io.Writer) error {
+			t.Fatal("updater called for conflicting flags")
+			return nil
+		}
+		if status := runWithUpdater([]string{"-v", "-u"}, &stdout, &stderr, updater); status != 1 {
+			t.Fatalf("runWithUpdater() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "cannot be used together") {
+			t.Fatalf("stderr = %q, want conflicting flag error", stderr.String())
+		}
+	})
+
+	t.Run("flag with binary", func(t *testing.T) {
+		for _, option := range []string{"-v", "-u"} {
+			var stdout, stderr bytes.Buffer
+			if status := run([]string{option, "-b", "/bin/true"}, &stdout, &stderr); status != 1 {
+				t.Fatalf("run(%s) status = %d, want 1", option, status)
+			}
+			if !strings.Contains(stderr.String(), "does not accept a binary") {
+				t.Fatalf("run(%s) stderr = %q, want binary argument error", option, stderr.String())
+			}
+		}
+	})
+
+	t.Run("binary flag and positional binary", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-b", "/bin/true", "/bin/false"}, &stdout, &stderr); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "cannot be combined") {
+			t.Fatalf("stderr = %q, want conflicting binary argument error", stderr.String())
+		}
+	})
+
 	t.Run("missing file", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
-		if status := run([]string{"/definitely/missing"}, &stdout, &stderr); status != 1 {
+		if status := run([]string{"-b", "/definitely/missing"}, &stdout, &stderr); status != 1 {
 			t.Fatalf("run() status = %d, want 1", status)
 		}
 		if stdout.Len() != 0 {
@@ -508,7 +608,7 @@ func TestRunValidBinaryAndOutputFailure(t *testing.T) {
 	)
 
 	var stdout, stderr bytes.Buffer
-	if status := run([]string{path}, &stdout, &stderr); status != 0 {
+	if status := run([]string{"-b", path}, &stdout, &stderr); status != 0 {
 		t.Fatalf("run() status = %d, want 0; stderr: %s", status, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "RELRO: Full RELRO") {
@@ -519,7 +619,7 @@ func TestRunValidBinaryAndOutputFailure(t *testing.T) {
 	}
 
 	stderr.Reset()
-	if status := run([]string{path}, failingWriter{}, &stderr); status != 1 {
+	if status := run([]string{"-b", path}, failingWriter{}, &stderr); status != 1 {
 		t.Fatalf("run() status = %d, want 1", status)
 	}
 	if !strings.Contains(stderr.String(), "failed to write output") {
@@ -549,7 +649,7 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("failed to build gochecksec: %v\n%s", err, combined)
 	}
 
-	command := exec.Command(gochecksec, target)
+	command := exec.Command(gochecksec, "-b", target)
 	output, err := command.CombinedOutput()
 	if err != nil {
 		t.Fatalf("gochecksec failed: %v\n%s", err, output)

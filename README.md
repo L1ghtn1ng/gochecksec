@@ -53,12 +53,27 @@ release workflow trigger.
 ## Usage
 
 ```bash
-gochecksec /path/to/elf-file
+gochecksec -b /path/to/elf-file
 gochecksec -v
+gochecksec -u
+gochecksec -h
 ```
+
+Use `-b` to select the ELF binary to inspect. The original positional form,
+`gochecksec /path/to/elf-file`, remains supported for compatibility.
 
 A `-v` invocation prints the program version and exits successfully without
 opening an ELF file.
+
+A `-u` invocation checks the latest published GitHub Release, selects the
+package for the current CPU and Linux distribution, verifies its GitHub
+SHA-256 digest, and installs it with the native package tool. Debian-family
+systems use `dpkg`, RPM-family systems use `rpm`, and Arch-family systems use
+`pacman`. The updater supports the published AMD64 and ARM64 packages, refuses
+downgrades, and re-verifies an unprivileged download from root-owned staging
+before installation. For origin safety, `-u` is available only when the running
+executable is the package-managed `/usr/bin/gochecksec`; archive installations
+and copies created by `go install` must use their original update method.
 
 A successful inspection exits with status 0, regardless of whether the target
 is hardened. Invalid arguments, unreadable or malformed ELF inputs, and output

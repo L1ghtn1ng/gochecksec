@@ -3,6 +3,7 @@ package main
 import (
 	"debug/elf"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -663,8 +664,39 @@ func writeOpenError(writer io.Writer, filename string, openErr error) {
 	_, _ = fmt.Fprintf(writer, "failed to open %s: %v\n", filename, openErr)
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 1 && args[0] == "-v" {
+type updateRunner func(stdout, stderr io.Writer) error
+
+func runWithUpdater(args []string, stdout, stderr io.Writer, updater updateRunner) int {
+	flags := flag.NewFlagSet("gochecksec", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	binaryPath := flags.String("b", "", "ELF binary to inspect")
+	showVersion := flags.Bool("v", false, "print the program version")
+	performUpdate := flags.Bool("u", false, "update the package-managed installation from GitHub")
+	flags.Usage = func() {
+		_, _ = fmt.Fprintln(stderr, "Usage: gochecksec -b <binary>")
+		_, _ = fmt.Fprintln(stderr, "       gochecksec <binary>")
+		_, _ = fmt.Fprintln(stderr, "       gochecksec [options]")
+		flags.PrintDefaults()
+	}
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 1
+	}
+
+	if *showVersion && *performUpdate {
+		_, _ = fmt.Fprintln(stderr, "-v and -u cannot be used together")
+		flags.Usage()
+		return 1
+	}
+
+	if *showVersion {
+		if *binaryPath != "" || flags.NArg() != 0 {
+			_, _ = fmt.Fprintln(stderr, "-v does not accept a binary argument")
+			flags.Usage()
+			return 1
+		}
 		if _, err := fmt.Fprintf(stdout, "gochecksec version %s\n", version); err != nil {
 			_, _ = fmt.Fprintf(stderr, "failed to write output: %v\n", err)
 			return 1
@@ -672,12 +704,34 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	if len(args) != 1 {
-		_, _ = fmt.Fprintln(stderr, "Usage: gochecksec <binary> | gochecksec -v")
-		return 1
+	if *performUpdate {
+		if *binaryPath != "" || flags.NArg() != 0 {
+			_, _ = fmt.Fprintln(stderr, "-u does not accept a binary argument")
+			flags.Usage()
+			return 1
+		}
+		if err := updater(stdout, stderr); err != nil {
+			_, _ = fmt.Fprintf(stderr, "update failed: %v\n", err)
+			return 1
+		}
+		return 0
 	}
 
-	filename := args[0]
+	filename := *binaryPath
+	if filename != "" {
+		if flags.NArg() != 0 {
+			_, _ = fmt.Fprintln(stderr, "-b cannot be combined with a positional binary argument")
+			flags.Usage()
+			return 1
+		}
+	} else {
+		if flags.NArg() != 1 {
+			flags.Usage()
+			return 1
+		}
+		filename = flags.Arg(0)
+	}
+
 	binary, err := elf.Open(filename)
 	if err != nil {
 		writeOpenError(stderr, filename, err)
@@ -695,6 +749,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
+	return runWithUpdater(args, stdout, stderr, updateLatestRelease)
 }
 
 func main() {
