@@ -420,6 +420,27 @@ func (failingWriter) Write([]byte) (int, error) {
 	return 0, errors.New("write failure")
 }
 
+func TestRunVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{"-v"}, &stdout, &stderr); status != 0 {
+		t.Fatalf("run() status = %d, want 0; stderr: %s", status, stderr.String())
+	}
+	if stdout.String() != "gochecksec version 2.1.0\n" {
+		t.Fatalf("stdout = %q, want version output", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty output", stderr.String())
+	}
+
+	stderr.Reset()
+	if status := run([]string{"-v"}, failingWriter{}, &stderr); status != 1 {
+		t.Fatalf("run() status = %d, want 1", status)
+	}
+	if !strings.Contains(stderr.String(), "failed to write output") {
+		t.Fatalf("stderr = %q, want output error", stderr.String())
+	}
+}
+
 func TestRunErrors(t *testing.T) {
 	t.Run("usage", func(t *testing.T) {
 		var stdout, stderr bytes.Buffer
@@ -535,6 +556,15 @@ func TestIntegration(t *testing.T) {
 	}
 	if !bytes.Contains(output, []byte("RELRO: Full RELRO")) {
 		t.Fatalf("output does not contain full RELRO result:\n%s", output)
+	}
+
+	command = exec.Command(gochecksec, "-v")
+	output, err = command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gochecksec -v failed: %v\n%s", err, output)
+	}
+	if string(output) != "gochecksec version 2.1.0\n" {
+		t.Fatalf("gochecksec -v output = %q, want version output", output)
 	}
 
 	command = exec.Command(gochecksec, filepath.Join(directory, "missing"))

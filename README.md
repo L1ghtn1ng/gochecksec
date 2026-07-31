@@ -54,7 +54,11 @@ release workflow trigger.
 
 ```bash
 gochecksec /path/to/elf-file
+gochecksec -v
 ```
+
+A `-v` invocation prints the program version and exits successfully without
+opening an ELF file.
 
 A successful inspection exits with status 0, regardless of whether the target
 is hardened. Invalid arguments, unreadable or malformed ELF inputs, and output

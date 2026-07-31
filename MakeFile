@@ -1,5 +1,5 @@
 BINARY ?= gochecksec
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+VERSION ?= 2.1.0
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -20,6 +20,7 @@ build-arm64:
 
 test:
 	go test -v ./...
+	go test -v -race ./...
 
 clean:
 	@rm -f $(BINARY)_x86_64 $(BINARY)_arm64

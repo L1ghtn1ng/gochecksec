@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	version = "dev"
+	version = "2.1.0"
 	commit  = "none"
 	date    = "unknown"
 )
@@ -664,8 +664,16 @@ func writeOpenError(writer io.Writer, filename string, openErr error) {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "-v" {
+		if _, err := fmt.Fprintf(stdout, "gochecksec version %s\n", version); err != nil {
+			_, _ = fmt.Fprintf(stderr, "failed to write output: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
 	if len(args) != 1 {
-		_, _ = fmt.Fprintln(stderr, "Usage: gochecksec <binary>")
+		_, _ = fmt.Fprintln(stderr, "Usage: gochecksec <binary> | gochecksec -v")
 		return 1
 	}
 
