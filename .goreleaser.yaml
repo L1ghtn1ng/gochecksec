@@ -1,3 +1,5 @@
+version: 2
+
 project_name: gochecksec
 builds:
   - env: [CGO_ENABLED=0]
