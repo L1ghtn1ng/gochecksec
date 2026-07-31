@@ -412,10 +412,10 @@ func fortifiedBase(symbol string) (string, bool) {
 	}
 
 	candidate := symbol
-	if strings.HasPrefix(candidate, "__nldbl___") {
-		candidate = strings.TrimPrefix(candidate, "__nldbl___")
-	} else if strings.HasPrefix(candidate, "__") {
-		candidate = strings.TrimPrefix(candidate, "__")
+	if after, ok := strings.CutPrefix(candidate, "__nldbl___"); ok {
+		candidate = after
+	} else if after, ok := strings.CutPrefix(candidate, "__"); ok {
+		candidate = after
 	} else {
 		return "", false
 	}
