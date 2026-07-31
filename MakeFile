@@ -1,30 +1,37 @@
-BINARY=gochecksec
+BINARY ?= gochecksec
+VERSION ?= 2.1.0
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
+BUILD_DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+
+RELEASE_LDFLAGS = -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
+DEBUG_LDFLAGS = -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(BUILD_DATE)
+
+.PHONY: all build build-x86_64 build-arm64 test clean debug-amd64 debug-arm64 clean-debug
 
 all: test build
 
 build: build-x86_64 build-arm64
 
 build-x86_64:
-	GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o $(BINARY)_x86_64
+	GOOS=linux GOARCH=amd64 go build -ldflags "$(RELEASE_LDFLAGS)" -o $(BINARY)_x86_64 .
 
 build-arm64:
-	GOOS=linux GOARCH=arm64 go build -ldflags "-s -w" -o $(BINARY)_arm64
+	GOOS=linux GOARCH=arm64 go build -ldflags "$(RELEASE_LDFLAGS)" -o $(BINARY)_arm64 .
 
 test:
 	go test -v ./...
+	go test -v -race ./...
 
 clean:
 	@rm -f $(BINARY)_x86_64 $(BINARY)_arm64
 
 debug-amd64:
-	@export GOFLAGS=-gcflags="all=-N -l"
 	@echo "Building Debug AMD64 Binary"
-	GOOS=linux GOARCH=amd64 go build -ldflags "-X main.BuildTime=`date -u '+%Y-%m-%d_%I:%M:%S%p'`" -o $(BINARY)-debug-amd64 main.go
+	GOOS=linux GOARCH=amd64 go build -gcflags "all=-N -l" -ldflags "$(DEBUG_LDFLAGS)" -o $(BINARY)-debug-amd64 .
 
 debug-arm64:
-	@export GOFLAGS=-gcflags="all=-N -l"
 	@echo "Building Debug ARM64 Binary"
-	GOOS=linux GOARCH=arm64 go build -ldflags "-X main.BuildTime=`date -u '+%Y-%m-%d_%I:%M:%S%p'`" -o $(BINARY)-debug-arm64 main.go
+	GOOS=linux GOARCH=arm64 go build -gcflags "all=-N -l" -ldflags "$(DEBUG_LDFLAGS)" -o $(BINARY)-debug-arm64 .
 
 # Clean Debug Binary
 clean-debug:

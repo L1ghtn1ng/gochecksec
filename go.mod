@@ -1,4 +1,4 @@
-module gochecksec
+module github.com/L1ghtn1ng/gochecksec/v2
 
 go 1.26
 

@@ -1,44 +1,103 @@
 # gochecksec
+
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/L1ghtn1ng/gochecksec)
-A Go program that checks the security flags for Linux binaries
 
-# Summary
-This was inspired by pwntools checksec and not wanting to have to install a venv in python to be able 
-to use it when you want to use do a quick check of a binary security flags
+`gochecksec` is a standalone Go command that inspects the hardening properties
+of Linux ELF files. It is intended for quick local checks without requiring a
+Python environment.
 
-# Building
-This requires Go 1.26.0 or newer to build then you can use ```make -f MakeFile build``` to build the binaries.
+## Checks
 
-# Installing
-You can get the ```deb, rpm or archlinux pkg``` package from [here](https://github.com/L1ghtn1ng/gochecksec/releases/latest) as well as a precompiled binary for you respective CPU architecture from the ```.tar.gz``` and then move the gochecksec binary to ```/usr/local/bin/``` and you now have it installed
+The command reports:
 
-# Testing
+- RELRO: none, partial, full, unknown, or not applicable
+- PIE and ELF kind: fixed executable, PIE, static PIE, shared object, or
+  relocatable object
+- NX stack status, including a distinct result for a missing `PT_GNU_STACK`
+  header
+- Stack-canary symbols, with unknown used when stripped symbol tables prevent a
+  reliable answer
+- W^X violations in loadable segments
+- Fortify usage, including fortified and fortifiable imported-function counts
 
-The project includes comprehensive tests to ensure that the security checks are working correctly. The tests create
-sample binaries with different security properties and verify that the tool correctly identifies these properties.
+Unknown means the ELF file does not contain enough inspectable information for
+a reliable answer. N/A means the check does not apply to that ELF object type.
 
-## Running the Tests
+## Installation
 
-To run the tests, you need to have GCC installed on your system, as the tests compile sample C programs with different
-security flags.
+Download a `.deb`, `.rpm`, Arch Linux package, or precompiled archive from the
+[latest release](https://github.com/L1ghtn1ng/gochecksec/releases/latest).
+After extracting an archive, install the binary somewhere on your `PATH`, for
+example:
 
 ```bash
-# Run all tests
-go test -v
-
-# Run tests in short mode (skips tests that require compiling binaries)
-go test -v -short
+sudo install -m 0755 gochecksec /usr/local/bin/gochecksec
 ```
 
-## Test Coverage
+With Go 1.26 or newer, install the current v2 command directly:
 
-The tests cover all the security checks implemented in the tool:
+```bash
+go install github.com/L1ghtn1ng/gochecksec/v2@latest
+```
 
-1. RELRO (Relocation Read-Only) - None, Partial, Full
-2. PIE (Position Independent Executable) - Enabled, Disabled
-3. NX (Non-Executable Stack) - Enabled, Disabled
-4. Stack Canary - Present, Absent
-5. RWX segments - Present, Absent
-6. Fortify - Enabled, Disabled
+To build both supported release architectures from a checkout:
 
-The tests also include integration tests that run the entire tool on sample binaries and verify the output.
+```bash
+make -f MakeFile build
+```
+
+Release tags must use a `v`-prefixed semantic version such as `v2.1.0`.
+This is required by the module's `/v2` import path and is also enforced by the
+release workflow trigger.
+
+## Usage
+
+```bash
+gochecksec -b /path/to/elf-file
+gochecksec -v
+gochecksec -u
+gochecksec -h
+```
+
+Use `-b` to select the ELF binary to inspect. The original positional form,
+`gochecksec /path/to/elf-file`, remains supported for compatibility.
+
+A `-v` invocation prints the program version and exits successfully without
+opening an ELF file.
+
+A `-u` invocation checks the latest published GitHub Release, selects the
+package for the current CPU and Linux distribution, verifies its GitHub
+SHA-256 digest, and installs it with the native package tool. Debian-family
+systems use `dpkg`, RPM-family systems use `rpm`, and Arch-family systems use
+`pacman`. The updater supports the published AMD64 and ARM64 packages, refuses
+downgrades, and re-verifies an unprivileged download from root-owned staging
+before installation. For origin safety, `-u` is available only when the running
+executable is the package-managed `/usr/bin/gochecksec`; archive installations
+and copies created by `go install` must use their original update method.
+
+A successful inspection exits with status 0, regardless of whether the target
+is hardened. Invalid arguments, unreadable or malformed ELF inputs, and output
+write failures exit with status 1. Diagnostic messages are written to stderr;
+successful reports are written to stdout.
+
+## Testing
+
+The detector tests compile explicit ELF fixtures, so GCC, binutils, and a static
+glibc development library are required. Run the complete suite with:
+
+```bash
+go test -v ./...
+```
+
+Short mode runs the tests that do not require compiling fixtures:
+
+```bash
+go test -short -v ./...
+```
+
+The project also supports the standard Go checks:
+
+```bash
+go vet ./...
+go test -race ./...
+```

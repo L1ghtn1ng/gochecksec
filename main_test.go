@@ -5,6 +5,7 @@ import (
 	"debug/elf"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,515 +13,673 @@ import (
 	"testing"
 )
 
-// TestCheckRelro tests the RELRO detection
-func TestCheckRelro(t *testing.T) {
-	// Skip if running in short mode
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
-	}
-	defer cleanupTestBinaries(testBinaries)
-
-	tests := []struct {
-		name     string
-		binary   string
-		expected RelroStatus
-	}{
-		{
-			name:     "No RELRO",
-			binary:   testBinaries["no_relro"],
-			expected: RelroNone,
-		},
-		{
-			name:     "Partial RELRO",
-			binary:   testBinaries["partial_relro"],
-			expected: RelroPartial,
-		},
-		{
-			name:     "Full RELRO",
-			binary:   testBinaries["full_relro"],
-			expected: RelroFull,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			binary, err := elf.Open(tt.binary)
-			if err != nil {
-				t.Fatalf("Failed to open binary: %v", err)
-			}
-			defer binary.Close()
-
-			// Pass the binary path to the CheckRelro function
-			// This allows the function to use the filename as a hint
-			got := CheckRelroTest(binary, tt.binary)
-			if got != tt.expected {
-				t.Errorf("CheckRelro() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-// CheckRelroTest is a test-specific version of CheckRelro that takes the binary path
-// This is used only for testing to help identify the test binaries
-func CheckRelroTest(binary *elf.File, path string) RelroStatus {
-	// Use the filename to determine the expected RELRO status
-	if strings.Contains(path, "no_relro") {
-		return RelroNone
-	} else if strings.Contains(path, "full_relro") {
-		return RelroFull
-	} else if strings.Contains(path, "partial_relro") {
-		return RelroPartial
-	}
-
-	// Fall back to the regular CheckRelro function
-	return CheckRelro(binary)
-}
-
-// TestCheckPIE tests the PIE detection
-func TestCheckPIE(t *testing.T) {
-	// Skip if running in short mode
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
-	}
-	defer cleanupTestBinaries(testBinaries)
-
-	tests := []struct {
-		name     string
-		binary   string
-		expected bool
-	}{
-		{
-			name:     "PIE Enabled",
-			binary:   testBinaries["pie"],
-			expected: true,
-		},
-		{
-			name:     "PIE Disabled",
-			binary:   testBinaries["no_pie"],
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			binary, err := elf.Open(tt.binary)
-			if err != nil {
-				t.Fatalf("Failed to open binary: %v", err)
-			}
-			defer binary.Close()
-
-			got := CheckPIE(binary)
-			if got != tt.expected {
-				t.Errorf("CheckPIE() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestCheckNX tests the NX detection
-func TestCheckNX(t *testing.T) {
-	// Skip if running in short mode
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
-	}
-	defer cleanupTestBinaries(testBinaries)
-
-	tests := []struct {
-		name     string
-		binary   string
-		expected NXStatus
-	}{
-		{
-			name:     "NX Enabled",
-			binary:   testBinaries["nx"],
-			expected: NXEnabled,
-		},
-		{
-			name:     "NX Disabled",
-			binary:   testBinaries["no_nx"],
-			expected: NXDisabled,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			binary, err := elf.Open(tt.binary)
-			if err != nil {
-				t.Fatalf("Failed to open binary: %v", err)
-			}
-			defer binary.Close()
-
-			got := CheckNX(binary)
-			if got != tt.expected {
-				t.Errorf("CheckNX() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestCheckStackCanary tests the Stack Canary detection
-func TestCheckStackCanary(t *testing.T) {
-	// Skip if running in short mode
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
-	}
-	defer cleanupTestBinaries(testBinaries)
-
-	tests := []struct {
-		name     string
-		binary   string
-		expected CanaryStatus
-	}{
-		{
-			name:     "Stack Canary Present",
-			binary:   testBinaries["canary"],
-			expected: CanaryPresent,
-		},
-		{
-			name:     "Stack Canary Absent",
-			binary:   testBinaries["no_canary"],
-			expected: CanaryAbsent,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			binary, err := elf.Open(tt.binary)
-			if err != nil {
-				t.Fatalf("Failed to open binary: %v", err)
-			}
-			defer binary.Close()
-
-			got := CheckStackCanary(binary)
-			if got != tt.expected {
-				t.Errorf("CheckStackCanary() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestCheckRWX tests the RWX segment detection
-func TestCheckRWX(t *testing.T) {
-	// Skip if running in short mode
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
-	}
-	defer cleanupTestBinaries(testBinaries)
-
-	tests := []struct {
-		name     string
-		binary   string
-		expected bool
-	}{
-		{
-			name:     "RWX Present",
-			binary:   testBinaries["rwx"],
-			expected: true,
-		},
-		{
-			name:     "RWX Absent",
-			binary:   testBinaries["no_rwx"],
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			binary, err := elf.Open(tt.binary)
-			if err != nil {
-				t.Fatalf("Failed to open binary: %v", err)
-			}
-			defer binary.Close()
-
-			got := CheckRWX(binary)
-			if got != tt.expected {
-				t.Errorf("CheckRWX() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-// TestCheckFortify tests the Fortify detection
-func TestCheckFortify(t *testing.T) {
-	// Skip if running in short mode
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
-	}
-	defer cleanupTestBinaries(testBinaries)
-
-	tests := []struct {
-		name     string
-		binary   string
-		expected bool
-	}{
-		{
-			name:     "Fortify Enabled",
-			binary:   testBinaries["fortify"],
-			expected: true,
-		},
-		{
-			name:     "Fortify Disabled",
-			binary:   testBinaries["no_fortify"],
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			binary, err := elf.Open(tt.binary)
-			if err != nil {
-				t.Fatalf("Failed to open binary: %v", err)
-			}
-			defer binary.Close()
-
-			// Pass the binary path to the CheckFortify function
-			// This allows the function to use the filename as a hint
-			got := CheckFortifyTest(binary, tt.binary)
-			if got != tt.expected {
-				t.Errorf("CheckFortify() = %v, want %v", got, tt.expected)
-			}
-		})
-	}
-}
-
-// CheckFortifyTest is a test-specific version of CheckFortify that takes the binary path
-// This is used only for testing to help identify the test binaries
-func CheckFortifyTest(binary *elf.File, path string) bool {
-	// Use the filename to determine the expected Fortify status
-	if strings.Contains(path, "fortify") && !strings.Contains(path, "no_fortify") {
-		return true
-	} else if strings.Contains(path, "no_fortify") {
-		return false
-	}
-
-	// Fall back to the regular CheckFortify function
-	return CheckFortify(binary)
-}
-
-// Helper functions to create and clean up test binaries
-func createTestBinaries(t *testing.T) (map[string]string, error) {
-	// Create a temporary directory for test binaries
-	tempDir, err := os.MkdirTemp("", "gochecksec-test")
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a simple C program that will be compiled with different flags
-	sourceFile := filepath.Join(tempDir, "test.c")
-	err = os.WriteFile(sourceFile, []byte(`
+const testCSource = `
 #include <stdio.h>
 #include <string.h>
 
-int main() {
+int main(int argc, char **argv) {
     char buffer[64];
-    strcpy(buffer, "Hello, World!");
-    printf("%s\n", buffer);
+    if (argc < 2) {
+        return 0;
+    }
+    strcpy(buffer, argv[1]);
+    puts(buffer);
     return 0;
 }
-`), 0644)
+`
+
+type testFixtures map[string]string
+
+func requireTool(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err != nil {
+		t.Fatalf("required test tool %q was not found: %v", name, err)
+	}
+}
+
+func compileC(
+	t *testing.T,
+	directory string,
+	name string,
+	source string,
+	flags ...string,
+) string {
+	t.Helper()
+	output := filepath.Join(directory, name)
+	args := append([]string{"-x", "c"}, flags...)
+	args = append(args, "-o", output, "-")
+
+	command := exec.Command("gcc", args...)
+	command.Stdin = strings.NewReader(source)
+	if combined, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("failed to compile %s: %v\n%s", name, err, combined)
+	}
+	return output
+}
+
+func copyFile(t *testing.T, source, destination string) {
+	t.Helper()
+	data, err := os.ReadFile(source)
 	if err != nil {
-		os.RemoveAll(tempDir)
-		return nil, err
+		t.Fatalf("failed to read %s: %v", source, err)
 	}
-
-	// Compile with different flags to create binaries with different security properties
-	binaries := map[string]string{
-		"no_relro":      filepath.Join(tempDir, "no_relro"),
-		"partial_relro": filepath.Join(tempDir, "partial_relro"),
-		"full_relro":    filepath.Join(tempDir, "full_relro"),
-		"pie":           filepath.Join(tempDir, "pie"),
-		"no_pie":        filepath.Join(tempDir, "no_pie"),
-		"nx":            filepath.Join(tempDir, "nx"),
-		"no_nx":         filepath.Join(tempDir, "no_nx"),
-		"canary":        filepath.Join(tempDir, "canary"),
-		"no_canary":     filepath.Join(tempDir, "no_canary"),
-		"rwx":           filepath.Join(tempDir, "rwx"),
-		"no_rwx":        filepath.Join(tempDir, "no_rwx"),
-		"fortify":       filepath.Join(tempDir, "fortify"),
-		"no_fortify":    filepath.Join(tempDir, "no_fortify"),
-	}
-
-	// Compile with different flags
-	compileCommands := map[string][]string{
-		"no_relro":      {"gcc", "-o", binaries["no_relro"], "-Wl,-z,norelro", sourceFile},
-		"partial_relro": {"gcc", "-o", binaries["partial_relro"], sourceFile},
-		"full_relro":    {"gcc", "-o", binaries["full_relro"], "-Wl,-z,relro,-z,now", sourceFile},
-		"pie":           {"gcc", "-o", binaries["pie"], "-fPIE", "-pie", sourceFile},
-		"no_pie":        {"gcc", "-o", binaries["no_pie"], "-fno-PIE", "-no-pie", sourceFile},
-		"nx":            {"gcc", "-o", binaries["nx"], sourceFile},
-		"no_nx":         {"gcc", "-o", binaries["no_nx"], "-z", "execstack", sourceFile},
-		"canary":        {"gcc", "-o", binaries["canary"], "-fstack-protector-all", sourceFile},
-		"no_canary":     {"gcc", "-o", binaries["no_canary"], "-fno-stack-protector", sourceFile},
-		"rwx":           {"gcc", "-o", binaries["rwx"], "-z", "execstack", sourceFile},
-		"no_rwx":        {"gcc", "-o", binaries["no_rwx"], sourceFile},
-		"fortify":       {"gcc", "-o", binaries["fortify"], "-D_FORTIFY_SOURCE=2", "-O2", sourceFile},
-		"no_fortify":    {"gcc", "-o", binaries["no_fortify"], sourceFile},
-	}
-
-	// Compile each binary
-	for name, cmd := range compileCommands {
-		if err := compileBinary(name, cmd); err != nil {
-			t.Logf("Warning: %v", err)
-			// Continue with other binaries
-		}
-	}
-
-	return binaries, nil
-}
-
-func compileBinary(name string, cmd []string) error {
-	compileCmd := exec.Command(cmd[0], cmd[1:]...)
-	stderr := new(bytes.Buffer{})
-	compileCmd.Stderr = stderr
-
-	if err := compileCmd.Run(); err != nil {
-		// Go 1.26: errors.AsType provides a concise typed unwrap path.
-		exitErr, ok := errors.AsType[*exec.ExitError](err)
-		if !ok {
-			return fmt.Errorf("failed to compile %s: %w", name, err)
-		}
-
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = strings.TrimSpace(exitErr.Error())
-		}
-		return fmt.Errorf("failed to compile %s: %s", name, msg)
-	}
-
-	return nil
-}
-
-func cleanupTestBinaries(binaries map[string]string) {
-	if len(binaries) > 0 {
-		// Get the directory from the first binary
-		for _, path := range binaries {
-			os.RemoveAll(filepath.Dir(path))
-			break
-		}
+	if err := os.WriteFile(destination, data, 0o755); err != nil {
+		t.Fatalf("failed to write %s: %v", destination, err)
 	}
 }
 
-// TestIntegration tests the entire tool on sample binaries
-func TestIntegration(t *testing.T) {
-	// Skip if running in short mode
+func createTestFixtures(t *testing.T) testFixtures {
+	t.Helper()
+	requireTool(t, "gcc")
+	requireTool(t, "strip")
+
+	directory := t.TempDir()
+	fixtures := testFixtures{
+		"no_relro": compileC(
+			t,
+			directory,
+			"no-relro",
+			testCSource,
+			"-fno-PIE",
+			"-no-pie",
+			"-Wl,-z,norelro",
+		),
+		"partial_relro": compileC(
+			t,
+			directory,
+			"partial-relro",
+			testCSource,
+			"-fPIE",
+			"-pie",
+			"-Wl,-z,relro,-z,lazy",
+		),
+		"full_relro_pie": compileC(
+			t,
+			directory,
+			"full-relro-pie",
+			testCSource,
+			"-fPIE",
+			"-pie",
+			"-Wl,-z,relro,-z,now",
+		),
+		"full_relro_no_pie": compileC(
+			t,
+			directory,
+			"full-relro-no-pie",
+			testCSource,
+			"-fno-PIE",
+			"-no-pie",
+			"-Wl,-z,relro,-z,now",
+		),
+		"pie": compileC(
+			t,
+			directory,
+			"pie",
+			testCSource,
+			"-fPIE",
+			"-pie",
+		),
+		"no_pie": compileC(
+			t,
+			directory,
+			"no-pie",
+			testCSource,
+			"-fno-PIE",
+			"-no-pie",
+		),
+		"static_pie": compileC(
+			t,
+			directory,
+			"static-pie",
+			testCSource,
+			"-static-pie",
+		),
+		"shared_object": compileC(
+			t,
+			directory,
+			"libsample.so",
+			"int sample(void) { return 1; }",
+			"-shared",
+			"-fPIC",
+		),
+		"relocatable": compileC(
+			t,
+			directory,
+			"sample.o",
+			"int sample(void) { return 1; }",
+			"-c",
+		),
+		"nx": compileC(
+			t,
+			directory,
+			"nx",
+			testCSource,
+			"-Wl,-z,noexecstack",
+		),
+		"no_nx": compileC(
+			t,
+			directory,
+			"no-nx",
+			testCSource,
+			"-Wl,-z,execstack",
+		),
+		"canary": compileC(
+			t,
+			directory,
+			"canary",
+			testCSource,
+			"-O0",
+			"-fstack-protector-all",
+		),
+		"no_canary": compileC(
+			t,
+			directory,
+			"no-canary",
+			testCSource,
+			"-O0",
+			"-fno-stack-protector",
+		),
+		"fortify": compileC(
+			t,
+			directory,
+			"fortify",
+			testCSource,
+			"-O2",
+			"-D_FORTIFY_SOURCE=2",
+		),
+		"no_fortify": compileC(
+			t,
+			directory,
+			"no-fortify",
+			testCSource,
+			"-O0",
+			"-U_FORTIFY_SOURCE",
+		),
+		"no_fortifiable": compileC(
+			t,
+			directory,
+			"no-fortifiable",
+			"int main(void) { return 0; }",
+			"-O0",
+		),
+		"static_canary": compileC(
+			t,
+			directory,
+			"static-canary",
+			testCSource,
+			"-static",
+			"-O0",
+			"-fstack-protector-all",
+		),
+	}
+
+	strippedCanary := filepath.Join(directory, "static-canary-stripped")
+	copyFile(t, fixtures["static_canary"], strippedCanary)
+	if combined, err := exec.Command("strip", "-s", strippedCanary).CombinedOutput(); err != nil {
+		t.Fatalf("failed to strip static canary fixture: %v\n%s", err, combined)
+	}
+	fixtures["static_canary_stripped"] = strippedCanary
+
+	return fixtures
+}
+
+func checkELF[T comparable](
+	t *testing.T,
+	path string,
+	check func(*elf.File) T,
+	expected T,
+) {
+	t.Helper()
+	binary, err := elf.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open %s: %v", path, err)
+	}
+	defer binary.Close()
+
+	if actual := check(binary); actual != expected {
+		t.Errorf("check result = %v, want %v", actual, expected)
+	}
+}
+
+func TestSecurityChecks(t *testing.T) {
 	if testing.Short() {
-		t.Skip("Skipping test in short mode")
+		t.Skip("security fixture tests require GCC")
+	}
+	fixtures := createTestFixtures(t)
+
+	t.Run("RELRO", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			fixture  string
+			expected RelroStatus
+		}{
+			{"none", "no_relro", RelroNone},
+			{"partial", "partial_relro", RelroPartial},
+			{"full PIE", "full_relro_pie", RelroFull},
+			{"full non-PIE", "full_relro_no_pie", RelroFull},
+			{"static executable", "static_canary", RelroNotApplicable},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				checkELF(t, fixtures[test.fixture], CheckRelro, test.expected)
+			})
+		}
+	})
+
+	t.Run("PIE", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			fixture  string
+			expected PIEStatus
+		}{
+			{"enabled", "pie", PIEEnabled},
+			{"disabled", "no_pie", PIEDisabled},
+			{"static PIE", "static_pie", PIEStatic},
+			{"shared object", "shared_object", PIESharedObject},
+			{"relocatable", "relocatable", PIERelocatable},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				checkELF(t, fixtures[test.fixture], CheckPIE, test.expected)
+			})
+		}
+	})
+
+	t.Run("NX", func(t *testing.T) {
+		checkELF(t, fixtures["nx"], CheckNX, NXEnabled)
+		checkELF(t, fixtures["no_nx"], CheckNX, NXDisabled)
+		checkELF(t, fixtures["relocatable"], CheckNX, NXNotApplicable)
+	})
+
+	t.Run("stack canary", func(t *testing.T) {
+		checkELF(t, fixtures["canary"], CheckStackCanary, CanaryPresent)
+		checkELF(t, fixtures["no_canary"], CheckStackCanary, CanaryAbsent)
+		checkELF(
+			t,
+			fixtures["static_canary_stripped"],
+			CheckStackCanary,
+			CanaryUnknown,
+		)
+	})
+
+	t.Run("W^X", func(t *testing.T) {
+		checkELF(t, fixtures["nx"], CheckRWX, RWXAbsent)
+		// An executable stack is an NX failure, not a PT_LOAD W^X failure.
+		checkELF(t, fixtures["no_nx"], CheckRWX, RWXAbsent)
+		checkELF(t, fixtures["relocatable"], CheckRWX, RWXNotApplicable)
+	})
+
+	t.Run("Fortify", func(t *testing.T) {
+		tests := []struct {
+			name        string
+			fixture     string
+			status      FortifyStatus
+			fortified   int
+			fortifiable int
+		}{
+			{"enabled", "fortify", FortifyEnabled, 1, 1},
+			{"disabled", "no_fortify", FortifyDisabled, 0, 1},
+			{"not applicable", "no_fortifiable", FortifyNotApplicable, 0, 0},
+		}
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				binary, err := elf.Open(fixtures[test.fixture])
+				if err != nil {
+					t.Fatalf("failed to open fixture: %v", err)
+				}
+				defer binary.Close()
+
+				result := CheckFortify(binary)
+				if result.Status != test.status {
+					t.Errorf("status = %v, want %v", result.Status, test.status)
+				}
+				if result.Fortified != test.fortified {
+					t.Errorf("fortified = %d, want %d", result.Fortified, test.fortified)
+				}
+				if result.Fortifiable != test.fortifiable {
+					t.Errorf(
+						"fortifiable = %d, want %d",
+						result.Fortifiable,
+						test.fortifiable,
+					)
+				}
+			})
+		}
+	})
+}
+
+func TestCheckNXUsesLastGNUStackHeader(t *testing.T) {
+	executable := &elf.Prog{
+		ProgHeader: elf.ProgHeader{Type: elf.PT_GNU_STACK, Flags: elf.PF_R | elf.PF_W | elf.PF_X},
+	}
+	nonExecutable := &elf.Prog{
+		ProgHeader: elf.ProgHeader{Type: elf.PT_GNU_STACK, Flags: elf.PF_R | elf.PF_W},
 	}
 
-	// Create test binaries
-	testBinaries, err := createTestBinaries(t)
-	if err != nil {
-		t.Fatalf("Failed to create test binaries: %v", err)
+	binary := &elf.File{
+		FileHeader: elf.FileHeader{Type: elf.ET_EXEC},
+		Progs:      []*elf.Prog{executable, nonExecutable},
 	}
-	defer cleanupTestBinaries(testBinaries)
-
-	// Build the gochecksec binary
-	gochecksecBin := filepath.Join(t.TempDir(), "gochecksec")
-	buildCmd := exec.Command("go", "build", "-o", gochecksecBin, ".")
-	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build gochecksec: %v", err)
+	if actual := CheckNX(binary); actual != NXEnabled {
+		t.Fatalf("CheckNX() = %v, want %v", actual, NXEnabled)
 	}
-	defer os.Remove(gochecksecBin)
 
-	// Test cases
+	binary.Progs = []*elf.Prog{nonExecutable, executable}
+	if actual := CheckNX(binary); actual != NXDisabled {
+		t.Fatalf("CheckNX() = %v, want %v", actual, NXDisabled)
+	}
+}
+
+func TestCheckRWXOnlyExaminesLoadableSegments(t *testing.T) {
+	binary := &elf.File{
+		FileHeader: elf.FileHeader{Type: elf.ET_EXEC},
+		Progs: []*elf.Prog{
+			{
+				ProgHeader: elf.ProgHeader{
+					Type:  elf.PT_GNU_STACK,
+					Flags: elf.PF_R | elf.PF_W | elf.PF_X,
+				},
+			},
+			{
+				ProgHeader: elf.ProgHeader{
+					Type:  elf.PT_LOAD,
+					Flags: elf.PF_R | elf.PF_W,
+				},
+			},
+		},
+	}
+	if actual := CheckRWX(binary); actual != RWXAbsent {
+		t.Fatalf("CheckRWX() = %v, want %v", actual, RWXAbsent)
+	}
+
+	binary.Progs[1].Flags |= elf.PF_X
+	if actual := CheckRWX(binary); actual != RWXPresent {
+		t.Fatalf("CheckRWX() = %v, want %v", actual, RWXPresent)
+	}
+}
+
+func TestGetArchName(t *testing.T) {
 	tests := []struct {
-		name        string
-		binary      string
-		expected    []string
-		notExpected []string
+		machine  elf.Machine
+		expected string
 	}{
-		{
-			name:   "Full Security Binary",
-			binary: testBinaries["full_relro"],
-			expected: []string{
-				// Note: The actual binary reports Partial RELRO for the full_relro binary
-				// This is a known limitation of the current implementation
-				"RELRO: Partial RELRO",
-				"PIE: Enabled",
-				"NX: NX Enabled",
-			},
-			notExpected: []string{
-				"RELRO: No RELRO",
-				"PIE: Disabled",
-				"NX: NX Disabled",
-			},
-		},
-		{
-			name:   "No Security Binary",
-			binary: testBinaries["no_relro"],
-			expected: []string{
-				"RELRO: No RELRO",
-			},
-			notExpected: []string{
-				"RELRO: Full RELRO",
-			},
-		},
+		{elf.EM_X86_64, "x86-64"},
+		{elf.EM_386, "x86"},
+		{elf.EM_AARCH64, "aarch64"},
+		{elf.EM_ARM, "ARM"},
+		{elf.EM_RISCV, "RISC-V"},
+	}
+	for _, test := range tests {
+		if actual := GetArchName(test.machine); actual != test.expected {
+			t.Errorf("GetArchName(%v) = %q, want %q", test.machine, actual, test.expected)
+		}
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("write failure")
+}
+
+func TestRunVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{"-v"}, &stdout, &stderr); status != 0 {
+		t.Fatalf("run() status = %d, want 0; stderr: %s", status, stderr.String())
+	}
+	if stdout.String() != "gochecksec version 2.1.0\n" {
+		t.Fatalf("stdout = %q, want version output", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty output", stderr.String())
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Run gochecksec on the binary
-			cmd := exec.Command(gochecksecBin, tt.binary)
-			stdout := new(bytes.Buffer{})
-			cmd.Stdout = stdout
-			stderr := new(bytes.Buffer{})
-			cmd.Stderr = stderr
+	stderr.Reset()
+	if status := run([]string{"-v"}, failingWriter{}, &stderr); status != 1 {
+		t.Fatalf("run() status = %d, want 1", status)
+	}
+	if !strings.Contains(stderr.String(), "failed to write output") {
+		t.Fatalf("stderr = %q, want output error", stderr.String())
+	}
+}
 
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("Failed to run gochecksec: %v\nStderr: %s", err, stderr.String())
+func TestRunUpdate(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		called := false
+		updater := func(output, diagnostics io.Writer) error {
+			called = true
+			_, err := fmt.Fprintln(output, "updated")
+			return err
+		}
+		if status := runWithUpdater([]string{"-u"}, &stdout, &stderr, updater); status != 0 {
+			t.Fatalf("runWithUpdater() status = %d, want 0; stderr: %s", status, stderr.String())
+		}
+		if !called {
+			t.Fatal("updater was not called")
+		}
+		if stdout.String() != "updated\n" {
+			t.Fatalf("stdout = %q, want updater output", stdout.String())
+		}
+		if stderr.Len() != 0 {
+			t.Fatalf("stderr = %q, want empty output", stderr.String())
+		}
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		updater := func(io.Writer, io.Writer) error {
+			return errors.New("network failure")
+		}
+		if status := runWithUpdater([]string{"-u"}, &stdout, &stderr, updater); status != 1 {
+			t.Fatalf("runWithUpdater() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "update failed: network failure") {
+			t.Fatalf("stderr = %q, want update error", stderr.String())
+		}
+	})
+}
+
+func TestRunErrors(t *testing.T) {
+	t.Run("help", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-h"}, &stdout, &stderr); status != 0 {
+			t.Fatalf("run() status = %d, want 0", status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("stdout = %q, want empty output", stdout.String())
+		}
+		for _, expected := range []string{"Usage:", "-b", "-u", "-v"} {
+			if !strings.Contains(stderr.String(), expected) {
+				t.Fatalf("stderr = %q, want %q", stderr.String(), expected)
 			}
+		}
+	})
 
-			output := stdout.String()
+	t.Run("usage", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run(nil, &stdout, &stderr); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("stdout = %q, want empty output", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "Usage:") {
+			t.Fatalf("stderr = %q, want usage message", stderr.String())
+		}
+	})
 
-			// Check for expected strings
-			for _, exp := range tt.expected {
-				if !strings.Contains(output, exp) {
-					t.Errorf("Expected output to contain %q, but it didn't\nOutput: %s", exp, output)
-				}
+	t.Run("unknown flag", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-unknown"}, &stdout, &stderr); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Fatalf("stderr = %q, want flag parse error", stderr.String())
+		}
+	})
+
+	t.Run("conflicting flags", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		updater := func(io.Writer, io.Writer) error {
+			t.Fatal("updater called for conflicting flags")
+			return nil
+		}
+		if status := runWithUpdater([]string{"-v", "-u"}, &stdout, &stderr, updater); status != 1 {
+			t.Fatalf("runWithUpdater() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "cannot be used together") {
+			t.Fatalf("stderr = %q, want conflicting flag error", stderr.String())
+		}
+	})
+
+	t.Run("flag with binary", func(t *testing.T) {
+		for _, option := range []string{"-v", "-u"} {
+			var stdout, stderr bytes.Buffer
+			if status := run([]string{option, "-b", "/bin/true"}, &stdout, &stderr); status != 1 {
+				t.Fatalf("run(%s) status = %d, want 1", option, status)
 			}
-
-			// Check for strings that should not be present
-			for _, notExp := range tt.notExpected {
-				if strings.Contains(output, notExp) {
-					t.Errorf("Expected output to NOT contain %q, but it did\nOutput: %s", notExp, output)
-				}
+			if !strings.Contains(stderr.String(), "does not accept a binary") {
+				t.Fatalf("run(%s) stderr = %q, want binary argument error", option, stderr.String())
 			}
-		})
+		}
+	})
+
+	t.Run("binary flag and positional binary", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-b", "/bin/true", "/bin/false"}, &stdout, &stderr); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if !strings.Contains(stderr.String(), "cannot be combined") {
+			t.Fatalf("stderr = %q, want conflicting binary argument error", stderr.String())
+		}
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		if status := run([]string{"-b", "/definitely/missing"}, &stdout, &stderr); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("stdout = %q, want empty output", stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "failed to open") {
+			t.Fatalf("stderr = %q, want open error", stderr.String())
+		}
+	})
+
+	t.Run("unwritable diagnostics", func(t *testing.T) {
+		if status := run(nil, &bytes.Buffer{}, failingWriter{}); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+		if status := run(
+			[]string{"/definitely/missing"},
+			&bytes.Buffer{},
+			failingWriter{},
+		); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+	})
+
+	t.Run("malformed ELF", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "malformed")
+		if err := os.WriteFile(path, []byte("\x7fELF"), 0o600); err != nil {
+			t.Fatalf("failed to create malformed fixture: %v", err)
+		}
+		if status := run([]string{path}, &bytes.Buffer{}, &bytes.Buffer{}); status != 1 {
+			t.Fatalf("run() status = %d, want 1", status)
+		}
+	})
+}
+
+func TestRunValidBinaryAndOutputFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("valid ELF fixture test requires GCC")
+	}
+	requireTool(t, "gcc")
+	path := compileC(
+		t,
+		t.TempDir(),
+		"full-relro",
+		testCSource,
+		"-fPIE",
+		"-pie",
+		"-Wl,-z,relro,-z,now",
+	)
+
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{"-b", path}, &stdout, &stderr); status != 0 {
+		t.Fatalf("run() status = %d, want 0; stderr: %s", status, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "RELRO: Full RELRO") {
+		t.Fatalf("stdout does not contain full RELRO result:\n%s", stdout.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty output", stderr.String())
+	}
+
+	stderr.Reset()
+	if status := run([]string{"-b", path}, failingWriter{}, &stderr); status != 1 {
+		t.Fatalf("run() status = %d, want 1", status)
+	}
+	if !strings.Contains(stderr.String(), "failed to write output") {
+		t.Fatalf("stderr = %q, want output error", stderr.String())
+	}
+}
+
+func TestIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test requires GCC and the Go toolchain")
+	}
+	requireTool(t, "gcc")
+	directory := t.TempDir()
+	target := compileC(
+		t,
+		directory,
+		"full-relro",
+		testCSource,
+		"-fPIE",
+		"-pie",
+		"-Wl,-z,relro,-z,now",
+	)
+	gochecksec := filepath.Join(directory, "gochecksec")
+
+	build := exec.Command("go", "build", "-o", gochecksec, ".")
+	if combined, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("failed to build gochecksec: %v\n%s", err, combined)
+	}
+
+	command := exec.Command(gochecksec, "-b", target)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gochecksec failed: %v\n%s", err, output)
+	}
+	if !bytes.Contains(output, []byte("RELRO: Full RELRO")) {
+		t.Fatalf("output does not contain full RELRO result:\n%s", output)
+	}
+
+	command = exec.Command(gochecksec, "-v")
+	output, err = command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gochecksec -v failed: %v\n%s", err, output)
+	}
+	if string(output) != "gochecksec version 2.1.0\n" {
+		t.Fatalf("gochecksec -v output = %q, want version output", output)
+	}
+
+	command = exec.Command(gochecksec, filepath.Join(directory, "missing"))
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err = command.Run()
+	var exitError *exec.ExitError
+	if !errors.As(err, &exitError) || exitError.ExitCode() != 1 {
+		t.Fatalf("missing-file exit error = %v, want exit code 1", err)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("missing-file stdout = %q, want empty output", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "failed to open") {
+		t.Fatalf("missing-file stderr = %q, want open error", stderr.String())
 	}
 }
