@@ -423,7 +423,7 @@ func TestRunVersion(t *testing.T) {
 	if status := run([]string{"-v"}, &stdout, &stderr); status != 0 {
 		t.Fatalf("run() status = %d, want 0; stderr: %s", status, stderr.String())
 	}
-	if stdout.String() != "gochecksec version 2.1.0\n" {
+	if stdout.String() != "gochecksec version 2.2.0\n" {
 		t.Fatalf("stdout = %q, want version output", stdout.String())
 	}
 	if stderr.Len() != 0 {
@@ -659,7 +659,7 @@ func TestIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gochecksec -v failed: %v\n%s", err, output)
 	}
-	if string(output) != "gochecksec version 2.1.0\n" {
+	if string(output) != "gochecksec version 2.2.0\n" {
 		t.Fatalf("gochecksec -v output = %q, want version output", output)
 	}
 
