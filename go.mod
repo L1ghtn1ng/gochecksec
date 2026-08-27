@@ -1,6 +1,6 @@
 module github.com/L1ghtn1ng/gochecksec/v2
 
-go 1.26
+go 1.27
 
 require github.com/fatih/color v1.19.0
 

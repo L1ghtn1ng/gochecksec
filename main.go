@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	version = "2.1.0"
+	version = "2.2.0"
 	commit  = "none"
 	date    = "unknown"
 )
@@ -656,8 +656,7 @@ func writeAnalysis(writer io.Writer, analysis Analysis) error {
 }
 
 func writeOpenError(writer io.Writer, filename string, openErr error) {
-	var pathErr *os.PathError
-	if errors.As(openErr, &pathErr) {
+	if pathErr, ok := errors.AsType[*os.PathError](openErr); ok {
 		_, _ = fmt.Fprintf(writer, "failed to open %s: %v\n", pathErr.Path, pathErr.Err)
 		return
 	}

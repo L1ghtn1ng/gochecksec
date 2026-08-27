@@ -350,15 +350,15 @@ func TestSecurityChecks(t *testing.T) {
 
 func TestCheckNXUsesLastGNUStackHeader(t *testing.T) {
 	executable := &elf.Prog{
-		ProgHeader: elf.ProgHeader{Type: elf.PT_GNU_STACK, Flags: elf.PF_R | elf.PF_W | elf.PF_X},
+		Type: elf.PT_GNU_STACK, Flags: elf.PF_R | elf.PF_W | elf.PF_X,
 	}
 	nonExecutable := &elf.Prog{
-		ProgHeader: elf.ProgHeader{Type: elf.PT_GNU_STACK, Flags: elf.PF_R | elf.PF_W},
+		Type: elf.PT_GNU_STACK, Flags: elf.PF_R | elf.PF_W,
 	}
 
 	binary := &elf.File{
-		FileHeader: elf.FileHeader{Type: elf.ET_EXEC},
-		Progs:      []*elf.Prog{executable, nonExecutable},
+		Type:  elf.ET_EXEC,
+		Progs: []*elf.Prog{executable, nonExecutable},
 	}
 	if actual := CheckNX(binary); actual != NXEnabled {
 		t.Fatalf("CheckNX() = %v, want %v", actual, NXEnabled)
@@ -372,19 +372,15 @@ func TestCheckNXUsesLastGNUStackHeader(t *testing.T) {
 
 func TestCheckRWXOnlyExaminesLoadableSegments(t *testing.T) {
 	binary := &elf.File{
-		FileHeader: elf.FileHeader{Type: elf.ET_EXEC},
+		Type: elf.ET_EXEC,
 		Progs: []*elf.Prog{
 			{
-				ProgHeader: elf.ProgHeader{
-					Type:  elf.PT_GNU_STACK,
-					Flags: elf.PF_R | elf.PF_W | elf.PF_X,
-				},
+				Type:  elf.PT_GNU_STACK,
+				Flags: elf.PF_R | elf.PF_W | elf.PF_X,
 			},
 			{
-				ProgHeader: elf.ProgHeader{
-					Type:  elf.PT_LOAD,
-					Flags: elf.PF_R | elf.PF_W,
-				},
+				Type:  elf.PT_LOAD,
+				Flags: elf.PF_R | elf.PF_W,
 			},
 		},
 	}

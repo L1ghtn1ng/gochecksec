@@ -34,7 +34,7 @@ example:
 sudo install -m 0755 gochecksec /usr/local/bin/gochecksec
 ```
 
-With Go 1.26 or newer, install the current v2 command directly:
+With Go 1.27.x, install the current v2 command directly:
 
 ```bash
 go install github.com/L1ghtn1ng/gochecksec/v2@latest
