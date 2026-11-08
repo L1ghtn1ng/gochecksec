@@ -292,7 +292,7 @@ func (config updaterConfig) update(stdin io.Reader, stdout, stderr io.Writer) er
 	if err != nil {
 		return fmt.Errorf("create update directory: %w", err)
 	}
-	defer os.RemoveAll(temporaryDirectory)
+	defer func() { _ = os.RemoveAll(temporaryDirectory) }()
 
 	if _, err := fmt.Fprintf(stdout, "Downloading gochecksec %s (%s/%s)...\n", latestName, kind, config.goarch); err != nil {
 		return fmt.Errorf("write progress: %w", err)
@@ -503,7 +503,7 @@ func (config updaterConfig) fetchLatestRelease() (githubRelease, error) {
 	if err != nil {
 		return githubRelease{}, fmt.Errorf("request latest GitHub release: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return githubRelease{}, fmt.Errorf("GitHub release API returned %s", response.Status)
 	}
@@ -538,7 +538,7 @@ func (config updaterConfig) downloadPackage(asset releaseAsset, directory string
 	if err != nil {
 		return "", fmt.Errorf("download %s: %w", asset.Name, err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("download %s: server returned %s", asset.Name, response.Status)
 	}
@@ -740,7 +740,7 @@ func readOSRelease(path string) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read Linux distribution metadata: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	values := make(map[string]string)
 	scanner := bufio.NewScanner(file)
